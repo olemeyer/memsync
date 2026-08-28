@@ -106,7 +106,7 @@ machine maps it to a local directory in its own configuration:
 ```toml
 [[roots]]
 id   = "home-memory"
-path = "/home/ole/.claude/projects/-home-ole/memory"
+path = "/home/you/.claude/projects/-home-you/memory"
 ```
 
 On a machine where the directory lives elsewhere, only `path` differs. Moving a directory is

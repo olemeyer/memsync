@@ -56,15 +56,15 @@ where it points is a local matter:
 # machine A
 [[roots]]
 id   = "home-memory"
-path = "/home/ole/.claude/projects/-home-ole/memory"
+path = "/home/you/.claude/projects/-home-you/memory"
 ```
 
 Moved a directory, changed user name, different project slug? Repoint the id and carry on —
 nothing in the store is rewritten:
 
 ```console
-$ memsync root map home-memory ~/work/.claude/projects/-home-ole-work/memory
-root home-memory: /home/ole/.claude/projects/-home-ole/memory -> /home/ole/work/…/memory
+$ memsync root map home-memory ~/work/.claude/projects/-home-you-work/memory
+root home-memory: /home/you/.claude/projects/-home-you/memory -> /home/you/work/…/memory
 ```
 
 
@@ -73,9 +73,9 @@ and where — if anywhere — this machine keeps it:
 
 ```console
 $ memsync root store
-  118  home-ole-Data-Code-ModelStudio2   /home/ole/.claude/projects/-home-ole-code-modelstudio/memory
-   25  home-ole-Data-Code-IDA            not configured here
-   12  home-ole                          /home/ole/.claude/projects/-home-ole/memory (+1 deleted)
+  118  home-you-src-big-project   /home/you/.claude/projects/-home-you-code-big-project/memory
+   25  home-you-src-other         not configured here
+   12  home-you                   /home/you/.claude/projects/-home-you/memory (+1 deleted)
 ```
 
 Roots that are not configured stay encrypted in the store and are never touched — not
@@ -93,7 +93,7 @@ On the first machine — create a **private** repository for the store first, th
 
 ```console
 $ memsync init --remote git@github.com:you/claude-memory-store.git
-root home-ole -> /home/ole/.claude/projects/-home-ole/memory
+root home-you -> /home/you/.claude/projects/-home-you/memory
 store initialised and this machine authorised as `thinkpad`
 public key: age1…
 $ memsync sync
