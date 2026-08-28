@@ -78,6 +78,8 @@ pub struct Report {
     pub tombstoned: usize,
     /// Divergent edits that were preserved side by side.
     pub conflicts: Vec<ObjectKey>,
+    /// Objects belonging to roots this machine does not have, left untouched.
+    pub ignored: usize,
     /// Whether anything was pushed.
     pub pushed: bool,
 }
@@ -147,9 +149,29 @@ impl<'a, G: GitRunner, C: Cipher, K: Clock> Engine<'a, G, C, K> {
     fn sync_once(&self) -> Result<Report, EngineError> {
         self.store.pull()?;
 
-        let base = state::load(&self.state_path)?;
+        let base = self.only_known_roots(state::load(&self.state_path)?);
         let local = self.read_local()?;
-        let remote = self.read_remote()?;
+
+        // Objects under a root this machine has not configured are none of its business:
+        // there is no local directory to compare them against, so including them would make
+        // every one of them look locally deleted and produce tombstones that destroy another
+        // machine's memories. They stay in the store, untouched and unrecorded.
+        let mut ignored = 0usize;
+        let remote: BTreeMap<ObjectKey, Blob> = self
+            .read_remote()?
+            .into_iter()
+            .filter(|(key, _)| {
+                let known = self.config.root(&key.root).is_some();
+                ignored += usize::from(!known);
+                known
+            })
+            .collect();
+        if ignored > 0 {
+            tracing::info!(
+                count = ignored,
+                "ignoring objects from roots not configured here"
+            );
+        }
 
         let local_snapshot = local
             .iter()
@@ -167,7 +189,10 @@ impl<'a, G: GitRunner, C: Cipher, K: Clock> Engine<'a, G, C, K> {
             label: &self.config.label,
         });
 
-        let mut report = Report::default();
+        let mut report = Report {
+            ignored,
+            ..Report::default()
+        };
         for action in &actions {
             self.apply(action, &local, &remote, &mut report)?;
         }
@@ -180,14 +205,27 @@ impl<'a, G: GitRunner, C: Cipher, K: Clock> Engine<'a, G, C, K> {
         report.pushed = self.store.commit_and_push(&self.commit_message(&report))?;
 
         // Re-read the store from disk so the recorded base is exactly what was pushed,
-        // rather than what we believe we pushed.
-        let settled: Snapshot = self
-            .read_remote()?
-            .iter()
-            .map(|(k, v)| (k.clone(), state_of(v)))
-            .collect();
+        // rather than what we believe we pushed — filtered, so an unknown root never
+        // enters the snapshot and cannot look deleted on the next run.
+        let settled = self.only_known_roots(
+            self.read_remote()?
+                .iter()
+                .map(|(k, v)| (k.clone(), state_of(v)))
+                .collect(),
+        );
         state::save(&self.state_path, &settled)?;
         Ok(report)
+    }
+
+    /// Drops every entry whose root this machine does not have configured.
+    ///
+    /// Applied to the loaded snapshot as well as the one written back, so a machine that
+    /// synchronises a subset of the roots neither acts on the rest nor records them.
+    fn only_known_roots(&self, snapshot: Snapshot) -> Snapshot {
+        snapshot
+            .into_iter()
+            .filter(|(key, _)| self.config.root(&key.root).is_some())
+            .collect()
     }
 
     fn commit_message(&self, report: &Report) -> String {

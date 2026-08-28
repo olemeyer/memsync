@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Data loss:** a machine that synchronised only some of the roots recorded the others in
+  its snapshot. On the next run they looked locally deleted, and it pushed tombstones that
+  would have destroyed another machine's memories. Objects under a root that is not
+  configured locally are now excluded from planning and from the recorded snapshot, on load
+  as well as on save — so a snapshot written by 0.1.0 heals itself instead of firing.
+- `sync` no longer reports objects as downloaded when they were skipped; it names them
+  separately as belonging to roots that are not configured here.
+
 ## [0.1.0] — 2026-08-29
 
 First working version.

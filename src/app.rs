@@ -399,7 +399,14 @@ fn random_salt() -> [u8; 32] {
 
 fn print_report(report: &Report) {
     if report.is_empty() {
-        println!("already in sync");
+        if report.ignored > 0 {
+            println!(
+                "already in sync ({} object(s) belong to roots not configured here)",
+                report.ignored
+            );
+        } else {
+            println!("already in sync");
+        }
         return;
     }
     let mut parts = Vec::new();
@@ -416,6 +423,13 @@ fn print_report(report: &Report) {
         parts.push(format!("{} deletions recorded", report.tombstoned));
     }
     println!("{}", parts.join(", "));
+
+    if report.ignored > 0 {
+        println!(
+            "{} object(s) belong to roots not configured here and were left alone",
+            report.ignored
+        );
+    }
 
     for key in &report.conflicts {
         println!("conflict: {key} — both versions kept, the older one renamed");

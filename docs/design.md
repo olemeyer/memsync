@@ -113,6 +113,15 @@ On a machine where the directory lives elsewhere, only `path` differs. Moving a 
 `memsync root map <id> <new-path>`; no data is rewritten. This is what makes the store
 survive a change of home directory, user name, or project slug.
 
+### Partial root sets
+
+A machine need not configure every root in the store. Objects under a root it does not have
+are excluded from planning *and* from the snapshot it records. Recording them would be
+actively dangerous: with no local directory to compare against, every one of them looks
+locally deleted on the following run, and the machine would push tombstones that destroy
+another machine's memories. The filter is applied when the snapshot is loaded as well as when
+it is written, so a snapshot from a version that lacked it is neutralised rather than obeyed.
+
 ### Synchronisation algorithm
 
 For every key in `local ∪ remote ∪ base`, where `base` is the snapshot recorded at the end of

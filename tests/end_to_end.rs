@@ -381,3 +381,82 @@ fn git_head(repo: &Path) -> String {
         .unwrap();
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
+
+#[test]
+fn a_root_this_machine_does_not_have_is_left_alone_rather_than_deleted() {
+    // Regression: a machine that synchronises only some of the roots used to record the
+    // others in its snapshot. On the next run they looked locally deleted, and it pushed
+    // tombstones that destroyed the other machine's memories.
+    let root = tempfile::tempdir().unwrap();
+    let (alpha, beta) = two_machines(root.path());
+
+    // Beta synchronises a second directory that alpha knows nothing about.
+    let beta_only = root.path().join("beta").join("project-memory");
+    std::fs::create_dir_all(&beta_only).unwrap();
+    std::fs::write(beta_only.join("design.md"), "only beta has this root").unwrap();
+    beta.map_root("beta-only", &beta_only);
+
+    beta.write("shared.md", "both machines have this");
+    beta.sync();
+
+    // Alpha runs repeatedly. The first run is where the objects entered its snapshot; the
+    // second is where the tombstones used to be pushed.
+    alpha.sync();
+    alpha.sync();
+    alpha.sync();
+
+    assert_eq!(
+        alpha.read("shared.md").as_deref(),
+        Some("both machines have this"),
+        "alpha must still receive the root it does have"
+    );
+    assert!(
+        alpha.files().iter().all(|f| f == "shared.md"),
+        "alpha must not materialise a root it has not configured: {:?}",
+        alpha.files()
+    );
+
+    beta.sync();
+    assert_eq!(
+        std::fs::read_to_string(beta_only.join("design.md")).unwrap(),
+        "only beta has this root",
+        "beta's exclusive root must survive alpha's runs"
+    );
+}
+
+#[test]
+fn a_poisoned_snapshot_from_an_older_version_does_not_delete_foreign_roots() {
+    // Defence in depth: a snapshot written by memsync 0.1.0 already contains entries for
+    // roots this machine does not have. Those entries must be ignored — if they are trusted,
+    // the object looks locally deleted and the next run tombstones another machine's file.
+    let root = tempfile::tempdir().unwrap();
+    let (alpha, beta) = two_machines(root.path());
+
+    let beta_only = root.path().join("beta").join("project-memory");
+    std::fs::create_dir_all(&beta_only).unwrap();
+    let contents = "only beta has this root";
+    std::fs::write(beta_only.join("design.md"), contents).unwrap();
+    beta.map_root("beta-only", &beta_only);
+    beta.sync();
+
+    // The hash must match what the store actually holds: with a stale hash the run takes the
+    // conflict path instead, and the deletion this test is about never happens.
+    let hash = memsync::model::ContentHash::of(contents.as_bytes()).0;
+    std::fs::write(
+        &alpha.paths.state,
+        format!(
+            r#"{{"version":1,"entries":[{{"key":{{"root":"beta-only","path":"design.md"}},
+               "state":"present","hash":"{hash}","modified_ms":1}}]}}"#
+        ),
+    )
+    .unwrap();
+
+    alpha.sync();
+    beta.sync();
+
+    assert_eq!(
+        std::fs::read_to_string(beta_only.join("design.md")).unwrap(),
+        contents,
+        "a stale snapshot entry must not turn into a deletion"
+    );
+}
