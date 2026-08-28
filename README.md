@@ -67,6 +67,20 @@ $ memsync root map home-memory ~/work/.claude/projects/-home-ole-work/memory
 root home-memory: /home/ole/.claude/projects/-home-ole/memory -> /home/ole/work/…/memory
 ```
 
+
+Not every machine needs every root. `memsync root store` shows what the store actually holds
+and where — if anywhere — this machine keeps it:
+
+```console
+$ memsync root store
+  118  home-ole-Data-Code-ModelStudio2   /home/ole/.claude/projects/-home-ole-code-modelstudio/memory
+   25  home-ole-Data-Code-IDA            not configured here
+   12  home-ole                          /home/ole/.claude/projects/-home-ole/memory (+1 deleted)
+```
+
+Roots that are not configured stay encrypted in the store and are never touched — not
+downloaded, and never mistaken for something you deleted.
+
 ## Setup
 
 Install:
@@ -112,7 +126,7 @@ installed SessionStart and SessionEnd hooks in /home/you/.claude/settings.json
 | `memsync sync [--quiet]` | pull, merge, push |
 | `memsync status` | what the store holds and whether this machine can read it |
 | `memsync key show \| list \| add \| remove \| export` | manage authorised machines |
-| `memsync root list \| add \| map \| remove` | manage synchronised directories |
+| `memsync root list \| store \| add \| map \| remove` | manage synchronised directories; `store` lists every root the store holds, mapped or not |
 | `memsync install-hooks` / `uninstall-hooks` | wire into Claude Code |
 
 ## Back up your key

@@ -3,7 +3,7 @@
 use crate::blob::Blob;
 use crate::config::{self, Config};
 use crate::crypto::{AgeCipher, Cipher, RecipientSet};
-use crate::engine::{Engine, Report, SystemClock};
+use crate::engine::{Engine, Report, RootSummary, SystemClock, summarise_roots};
 use crate::hooks;
 use crate::store::{GitStore, SystemGit};
 use age::secrecy::ExposeSecret;
@@ -220,6 +220,79 @@ pub fn key_remove(paths: &Paths, label: &str) -> Result<()> {
         "note: that machine still holds every copy it read before now. Rotate any credential \
          it could have seen."
     );
+    Ok(())
+}
+
+/// One root in the store, together with where this machine keeps it — if anywhere.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredRoot {
+    /// What the store holds for this root.
+    pub summary: RootSummary,
+    /// The local directory this machine maps the root to, if it is configured.
+    pub local_path: Option<PathBuf>,
+}
+
+/// Reads every object in the store and reports which roots it contains.
+///
+/// This is the answer to "what else is in there?" — a machine only materialises the roots it
+/// has configured, so without this the rest is invisible.
+pub fn stored_roots(paths: &Paths) -> Result<Vec<StoredRoot>> {
+    let (config, identity, store) = open(paths)?;
+    store.pull()?;
+
+    let recipients = load_recipients(&store)?;
+    let cipher = AgeCipher::new(identity, recipients.to_age()?);
+    let salt = read_salt(&store, &cipher)?;
+    let clock = SystemClock;
+    let engine = Engine::new(&config, &store, &cipher, &clock, salt, paths.state.clone());
+
+    let blobs = engine.read_remote()?;
+    Ok(summarise_roots(blobs.values())
+        .into_iter()
+        .map(|summary| StoredRoot {
+            local_path: config.root(&summary.id).map(|r| r.path.clone()),
+            summary,
+        })
+        .collect())
+}
+
+/// Prints the roots the store contains and how this machine maps them.
+pub fn root_store(paths: &Paths) -> Result<()> {
+    let roots = stored_roots(paths)?;
+    if roots.is_empty() {
+        println!("the store is empty");
+        return Ok(());
+    }
+
+    let width = roots.iter().map(|r| r.summary.id.len()).max().unwrap_or(0);
+    for root in &roots {
+        let deleted = if root.summary.tombstones > 0 {
+            format!(" (+{} deleted)", root.summary.tombstones)
+        } else {
+            String::new()
+        };
+        let location = root.local_path.as_ref().map_or_else(
+            || "not configured here".to_string(),
+            |p| p.display().to_string(),
+        );
+        println!(
+            "{:>5}  {:<width$}  {}{}",
+            root.summary.files,
+            root.summary.id,
+            location,
+            deleted,
+            width = width
+        );
+    }
+
+    let unmapped = roots.iter().filter(|r| r.local_path.is_none()).count();
+    if unmapped > 0 {
+        println!();
+        println!(
+            "{unmapped} root(s) are not configured here. To take one on this machine:\n    \
+             memsync root add <id> <local directory>"
+        );
+    }
     Ok(())
 }
 

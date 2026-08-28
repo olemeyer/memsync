@@ -309,7 +309,9 @@ impl<'a, G: GitRunner, C: Cipher, K: Clock> Engine<'a, G, C, K> {
         Ok(())
     }
 
-    fn read_remote(&self) -> Result<BTreeMap<ObjectKey, Blob>, EngineError> {
+    /// Decrypts and decodes every object in the store, including roots this machine has
+    /// not configured. Used by the listing command; the sync path filters afterwards.
+    pub fn read_remote(&self) -> Result<BTreeMap<ObjectKey, Blob>, EngineError> {
         let mut objects = BTreeMap::new();
         for name in self.store.blob_names()? {
             let Some(ciphertext) = self.store.read_blob(&name)? else {
@@ -467,6 +469,43 @@ impl<'a, G: GitRunner, C: Cipher, K: Clock> Engine<'a, G, C, K> {
     }
 }
 
+/// What one root contributes to the store.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RootSummary {
+    /// The logical root id, as stored.
+    pub id: String,
+    /// Objects that still hold a file.
+    pub files: usize,
+    /// Objects that record a deletion.
+    pub tombstones: usize,
+}
+
+/// Groups decoded store objects by root, most populated first.
+///
+/// Pure: the caller does the decrypting, this only counts. Ties are broken by id so the
+/// listing is stable between runs.
+pub fn summarise_roots<'a>(blobs: impl IntoIterator<Item = &'a Blob>) -> Vec<RootSummary> {
+    let mut by_root: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
+    for blob in blobs {
+        let entry = by_root.entry(blob.key.root.as_str()).or_default();
+        if blob.deleted {
+            entry.1 += 1;
+        } else {
+            entry.0 += 1;
+        }
+    }
+    let mut out: Vec<RootSummary> = by_root
+        .into_iter()
+        .map(|(id, (files, tombstones))| RootSummary {
+            id: id.to_string(),
+            files,
+            tombstones,
+        })
+        .collect();
+    out.sort_by(|a, b| b.files.cmp(&a.files).then_with(|| a.id.cmp(&b.id)));
+    out
+}
+
 struct LocalFile {
     #[allow(dead_code)]
     path: PathBuf,
@@ -532,6 +571,40 @@ mod tests {
     fn a_tombstone_reads_back_as_a_deletion() {
         let blob = Blob::tombstone(ObjectKey::new("r", "a.md"), 42);
         assert_eq!(state_of(&blob), FileState::Deleted { modified_ms: 42 });
+    }
+
+    #[test]
+    fn summarising_groups_by_root_and_orders_by_size() {
+        let blobs = vec![
+            Blob::file(ObjectKey::new("small", "a.md"), 1, b"x".to_vec()),
+            Blob::file(ObjectKey::new("big", "a.md"), 1, b"x".to_vec()),
+            Blob::file(ObjectKey::new("big", "b.md"), 1, b"x".to_vec()),
+            Blob::tombstone(ObjectKey::new("big", "gone.md"), 2),
+        ];
+        let summary = summarise_roots(&blobs);
+
+        assert_eq!(summary.len(), 2);
+        assert_eq!(
+            summary[0],
+            RootSummary {
+                id: "big".into(),
+                files: 2,
+                tombstones: 1
+            }
+        );
+        assert_eq!(
+            summary[1],
+            RootSummary {
+                id: "small".into(),
+                files: 1,
+                tombstones: 0
+            }
+        );
+    }
+
+    #[test]
+    fn summarising_an_empty_store_yields_nothing() {
+        assert!(summarise_roots(&[]).is_empty());
     }
 
     #[test]

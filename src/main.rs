@@ -46,6 +46,7 @@ fn run(cli: &Cli) -> Result<()> {
         },
         Command::Root { command } => match command {
             RootCommand::List => app::root_list(&paths),
+            RootCommand::Store => app::root_store(&paths),
             RootCommand::Add { id, path } | RootCommand::Map { id, path } => {
                 app::root_set(&paths, id, path)
             }

@@ -97,8 +97,10 @@ pub enum KeyCommand {
 /// Operations on the root mapping.
 #[derive(Debug, Subcommand)]
 pub enum RootCommand {
-    /// List the configured roots.
+    /// List the roots configured on this machine.
     List,
+    /// List every root the store contains, mapped or not.
+    Store,
     /// Add a directory under a new logical id.
     Add {
         /// Logical id, identical on every machine.

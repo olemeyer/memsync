@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `memsync root store` lists every root the store contains, with its object count, its
+  tombstone count, and the local directory this machine maps it to. Until now a machine could
+  not see the roots it had not configured — they were only visible in log warnings.
+
 ### Fixed
 
 - **Data loss:** a machine that synchronised only some of the roots recorded the others in

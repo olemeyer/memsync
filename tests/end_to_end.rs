@@ -460,3 +460,60 @@ fn a_poisoned_snapshot_from_an_older_version_does_not_delete_foreign_roots() {
         "a stale snapshot entry must not turn into a deletion"
     );
 }
+
+#[test]
+fn the_store_listing_shows_roots_this_machine_does_not_have() {
+    let root = tempfile::tempdir().unwrap();
+    let (alpha, beta) = two_machines(root.path());
+
+    let beta_only = root.path().join("beta").join("project-memory");
+    std::fs::create_dir_all(&beta_only).unwrap();
+    std::fs::write(beta_only.join("design.md"), "one").unwrap();
+    std::fs::write(beta_only.join("notes.md"), "two").unwrap();
+    beta.map_root("beta-only", &beta_only);
+    beta.write("shared.md", "three");
+    beta.sync();
+
+    let listing = app::stored_roots(&alpha.paths).unwrap();
+
+    let beta_root = listing
+        .iter()
+        .find(|r| r.summary.id == "beta-only")
+        .expect("listed");
+    assert_eq!(beta_root.summary.files, 2);
+    assert!(
+        beta_root.local_path.is_none(),
+        "alpha has no directory for that root"
+    );
+
+    let shared = listing
+        .iter()
+        .find(|r| r.summary.id == "home-memory")
+        .expect("listed");
+    assert_eq!(shared.local_path.as_deref(), Some(alpha.memory.as_path()));
+
+    // Most populated first.
+    assert_eq!(listing[0].summary.id, "beta-only");
+}
+
+#[test]
+fn the_store_listing_counts_tombstones_separately() {
+    let root = tempfile::tempdir().unwrap();
+    let (alpha, beta) = two_machines(root.path());
+
+    alpha.write("keep.md", "kept");
+    alpha.write("drop.md", "dropped");
+    alpha.sync();
+    beta.sync();
+
+    alpha.remove("drop.md");
+    alpha.sync();
+
+    let listing = app::stored_roots(&alpha.paths).unwrap();
+    let home = listing
+        .iter()
+        .find(|r| r.summary.id == "home-memory")
+        .unwrap();
+    assert_eq!(home.summary.files, 1, "a tombstone is not a file");
+    assert_eq!(home.summary.tombstones, 1);
+}
