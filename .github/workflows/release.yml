@@ -1,0 +1,23 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build and publish binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install stable --profile minimal
+      - run: cargo build --release
+      - name: Package
+        run: tar -czf memsync-${{ github.ref_name }}-x86_64-linux.tar.gz -C target/release memsync
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: memsync-*.tar.gz
+          generate_release_notes: true

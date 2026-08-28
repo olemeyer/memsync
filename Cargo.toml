@@ -1,0 +1,54 @@
+[package]
+name = "memsync"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "End-to-end encrypted, git-backed synchronisation of Claude Code memory files across machines"
+license = "MIT"
+repository = "https://github.com/olemeyer/memsync"
+readme = "README.md"
+keywords = ["sync", "encryption", "age", "git", "claude"]
+categories = ["command-line-utilities"]
+
+[lib]
+name = "memsync"
+path = "src/lib.rs"
+
+[[bin]]
+name = "memsync"
+path = "src/main.rs"
+
+[dependencies]
+age = { version = "0.12.1", features = ["armor"] }
+anyhow = "1.0.104"
+blake3 = "1.8.7"
+clap = { version = "4.6.6", features = ["derive"] }
+dirs = "6.0.0"
+hex = "0.4.3"
+rand = "0.10.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.18"
+toml = "1.1.4"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+walkdir = "2.5.0"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[profile.release]
+strip = true
+lto = "thin"
+
+# Lints are enforced in CI with `-D warnings`; see .github/workflows/ci.yml.
+[lints.rust]
+missing_docs = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+must_use_candidate = "allow"
